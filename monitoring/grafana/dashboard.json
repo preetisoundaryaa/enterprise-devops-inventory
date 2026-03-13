@@ -1,0 +1,51 @@
+{
+  "id": null,
+  "uid": "inventory-overview",
+  "title": "Inventory API Overview",
+  "tags": ["inventory", "devops"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 2,
+  "refresh": "10s",
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Request Rate (RPS)",
+      "targets": [
+        {
+          "expr": "sum(rate(inventory_api_requests_total{endpoint!='/metrics'}[1m])) by (endpoint)",
+          "legendFormat": "{{endpoint}}"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 0}
+    },
+    {
+      "type": "timeseries",
+      "title": "Request Latency p95 (seconds)",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(inventory_api_request_latency_seconds_bucket{endpoint!='/metrics'}[5m])) by (le, endpoint))",
+          "legendFormat": "{{endpoint}}"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 0}
+    },
+    {
+      "type": "timeseries",
+      "title": "Error Rate (%)",
+      "targets": [
+        {
+          "expr": "100 * (sum(rate(inventory_api_errors_total{endpoint!='/metrics'}[5m])) by (endpoint) / sum(rate(inventory_api_requests_total{endpoint!='/metrics'}[5m])) by (endpoint))",
+          "legendFormat": "{{endpoint}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 0}
+    }
+  ]
+}

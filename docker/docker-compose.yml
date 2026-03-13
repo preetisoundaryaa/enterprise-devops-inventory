@@ -1,0 +1,15 @@
+version: '3.9'
+services:
+  inventory-api:
+    build:
+      context: ../app/inventory-api
+    container_name: inventory-api
+    environment:
+      - DATABASE_URL=sqlite:///./inventory.db
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3

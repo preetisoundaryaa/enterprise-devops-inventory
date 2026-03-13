@@ -1,0 +1,40 @@
+# Python cache / compiled artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Build and binary artifacts
+*.so
+*.dylib
+*.dll
+*.exe
+*.out
+*.a
+*.o
+*.obj
+*.lib
+*.bin
+
+# Archives and packaged files
+*.7z
+*.gz
+*.zip
+*.tar
+*.tgz
+*.bz2
+*.rar
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Terraform local state
+.terraform/
+*.tfstate
+*.tfstate.*
+
+# OS/editor files
+.DS_Store
+.idea/
+.vscode/
