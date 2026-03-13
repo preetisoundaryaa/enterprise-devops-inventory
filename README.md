@@ -32,9 +32,7 @@ enterprise-devops-inventory
 │   ├── main.tf
 │   ├── variables.tf
 │   └── outputs.tf
-├── argocd
-│   ├── project.yaml
-│   └── application.yaml
+├── argocd/application.yaml
 ├── monitoring
 │   ├── prometheus/prometheus.yml
 │   ├── grafana/dashboard.json
@@ -98,14 +96,11 @@ terraform plan
 terraform apply
 ```
 
-### 5) Configure ArgoCD (GitOps Auto-Sync)
-Apply the ArgoCD project and application manifests:
+### 5) Configure ArgoCD
+Apply the ArgoCD application:
 ```bash
-kubectl apply -f argocd/project.yaml
 kubectl apply -f argocd/application.yaml
 ```
-
-This enables automated GitOps sync (auto-prune + self-heal) from the repository `kubernetes/` path into the `inventory` namespace.
 
 ## Jenkins Pipeline Stages
 The Jenkinsfile includes these stages:

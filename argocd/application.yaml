@@ -4,10 +4,10 @@ metadata:
   name: enterprise-devops-inventory
   namespace: argocd
 spec:
-  project: enterprise-devops-inventory
+  project: default
   source:
     repoURL: https://github.com/your-org/enterprise-devops-inventory.git
-    targetRevision: main
+    targetRevision: HEAD
     path: kubernetes
   destination:
     server: https://kubernetes.default.svc
@@ -16,15 +16,5 @@ spec:
     automated:
       prune: true
       selfHeal: true
-      allowEmpty: false
-    retry:
-      limit: 5
-      backoff:
-        duration: 5s
-        factor: 2
-        maxDuration: 3m
     syncOptions:
       - CreateNamespace=true
-      - PrunePropagationPolicy=foreground
-      - PruneLast=true
-      - ApplyOutOfSyncOnly=true
