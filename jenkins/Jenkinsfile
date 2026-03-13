@@ -1,0 +1,48 @@
+pipeline {
+    agent any
+
+    environment {
+        APP_NAME = 'enterprise-devops-inventory'
+        IMAGE_TAG = "${env.BUILD_NUMBER}"
+        REGISTRY = 'your-registry.example.com'
+        IMAGE = "${REGISTRY}/${APP_NAME}:${IMAGE_TAG}"
+    }
+
+    stages {
+        stage('checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('build') {
+            steps {
+                sh 'python3 -m pip install --upgrade pip'
+                sh 'pip3 install -r app/inventory-api/requirements.txt'
+                sh 'python3 -m py_compile app/inventory-api/main.py app/inventory-api/models.py app/inventory-api/database.py'
+            }
+        }
+
+        stage('docker build') {
+            steps {
+                sh 'docker build -t ${IMAGE} app/inventory-api'
+            }
+        }
+
+        stage('docker push') {
+            steps {
+                sh 'docker push ${IMAGE}'
+            }
+        }
+
+        stage('deploy to Kubernetes') {
+            steps {
+                sh "sed -i 's#your-registry/enterprise-devops-inventory:latest#${IMAGE}#' kubernetes/deployment.yaml"
+                sh 'kubectl apply -f kubernetes/postgres.yaml'
+                sh 'kubectl apply -f kubernetes/deployment.yaml'
+                sh 'kubectl apply -f kubernetes/service.yaml'
+                sh 'kubectl apply -f kubernetes/hpa.yaml'
+            }
+        }
+    }
+}

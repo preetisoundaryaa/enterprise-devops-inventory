@@ -1,0 +1,20 @@
+groups:
+  - name: inventory-api-alerts
+    rules:
+      - alert: InventoryApiDown
+        expr: up{job="inventory-api"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Inventory API is down"
+          description: "Prometheus could not scrape inventory-api for more than 2 minutes."
+
+      - alert: HighInventoryApiLatency
+        expr: histogram_quantile(0.95, sum(rate(inventory_api_request_latency_seconds_bucket[5m])) by (le)) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High API latency"
+          description: "95th percentile latency for inventory-api is above 1 second."
