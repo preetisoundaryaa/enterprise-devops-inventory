@@ -6,6 +6,7 @@ pipeline {
         IMAGE_TAG = "${env.BUILD_NUMBER}"
         REGISTRY = 'your-registry.example.com'
         IMAGE = "${REGISTRY}/${APP_NAME}:${IMAGE_TAG}"
+        DAST_TARGET_URL = 'http://enterprise-devops-inventory.default.svc.cluster.local:8000'
     }
 
     stages {
@@ -23,9 +24,61 @@ pipeline {
             }
         }
 
+        stage('SAST - Static code analysis') {
+            steps {
+                sh '''
+                    set -euo pipefail
+                    python3 -m pip install --upgrade bandit
+                    mkdir -p reports
+                    bandit -r app/inventory-api -f json -o reports/sast-bandit.json
+                '''
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: 'reports/sast-bandit.json', onlyIfSuccessful: false
+                }
+            }
+        }
+
+        stage('SCA - Dependency vulnerability scanning') {
+            steps {
+                sh '''
+                    set -euo pipefail
+                    python3 -m pip install --upgrade pip-audit
+                    mkdir -p reports
+                    pip-audit -r app/inventory-api/requirements.txt -f json -o reports/sca-pip-audit.json
+                '''
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: 'reports/sca-pip-audit.json', onlyIfSuccessful: false
+                }
+            }
+        }
+
         stage('docker build') {
             steps {
                 sh 'docker build -t ${IMAGE} app/inventory-api'
+            }
+        }
+
+        stage('Container scanning') {
+            steps {
+                sh '''
+                    set -euo pipefail
+                    mkdir -p reports
+                    docker run --rm \
+                        -v /var/run/docker.sock:/var/run/docker.sock \
+                        -v "$PWD:/workspace" \
+                        aquasec/trivy:0.56.2 image --format json \
+                        --output /workspace/reports/container-trivy.json \
+                        ${IMAGE}
+                '''
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: 'reports/container-trivy.json', onlyIfSuccessful: false
+                }
             }
         }
 
@@ -42,6 +95,65 @@ pipeline {
                 sh 'kubectl apply -f kubernetes/deployment.yaml'
                 sh 'kubectl apply -f kubernetes/service.yaml'
                 sh 'kubectl apply -f kubernetes/hpa.yaml'
+            }
+        }
+
+        stage('OWASP ZAP DAST scanning') {
+            steps {
+                sh '''
+                    set -euo pipefail
+                    mkdir -p reports
+                    docker run --rm \
+                        -v "$PWD/reports:/zap/wrk" \
+                        ghcr.io/zaproxy/zaproxy:2.15.0 zap-baseline.py \
+                        -t ${DAST_TARGET_URL} \
+                        -J zap-baseline.json \
+                        -r zap-baseline.html
+                '''
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: 'reports/zap-baseline.json, reports/zap-baseline.html', onlyIfSuccessful: false
+                }
+            }
+        }
+
+        stage('Log Analytics integration') {
+            steps {
+                sh '''
+                    set -euo pipefail
+                    if [ -n "$LOG_ANALYTICS_ENDPOINT" ] && [ -n "$LOG_ANALYTICS_TOKEN" ]; then
+                        case "$LOG_ANALYTICS_ENDPOINT" in
+                          https://*) ;;
+                          *) echo "Invalid LOG_ANALYTICS_ENDPOINT. Only HTTPS endpoints are allowed."; exit 1;;
+                        esac
+
+                        mkdir -p reports
+                        jq -n \
+                          --arg app "$APP_NAME" \
+                          --arg build "$BUILD_NUMBER" \
+                          --arg image "$IMAGE" \
+                          --arg status "security-scans-completed" \
+                          --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+                          '{app: $app, build: $build, image: $image, status: $status, timestamp: $timestamp}' > reports/log-analytics-payload.json
+
+                        auth_header_file="$(mktemp)"
+                        trap 'rm -f "$auth_header_file"' EXIT
+                        printf 'Authorization: Bearer %s\n' "$LOG_ANALYTICS_TOKEN" > "$auth_header_file"
+
+                        curl --fail --show-error --silent -X POST "$LOG_ANALYTICS_ENDPOINT" \
+                            -H @"$auth_header_file" \
+                            -H 'Content-Type: application/json' \
+                            --data-binary @reports/log-analytics-payload.json
+                    else
+                        echo "LOG_ANALYTICS_ENDPOINT or LOG_ANALYTICS_TOKEN not configured; skipping log shipping"
+                    fi
+                '''
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: 'reports/log-analytics-payload.json', onlyIfSuccessful: false, allowEmptyArchive: true
+                }
             }
         }
     }
