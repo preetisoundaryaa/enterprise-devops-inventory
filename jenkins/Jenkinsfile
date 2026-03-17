@@ -27,6 +27,7 @@ pipeline {
         stage('SAST - Static code analysis') {
             steps {
                 sh '''
+                    set -euo pipefail
                     python3 -m pip install --upgrade bandit
                     mkdir -p reports
                     bandit -r app/inventory-api -f json -o reports/sast-bandit.json
@@ -42,6 +43,7 @@ pipeline {
         stage('SCA - Dependency vulnerability scanning') {
             steps {
                 sh '''
+                    set -euo pipefail
                     python3 -m pip install --upgrade pip-audit
                     mkdir -p reports
                     pip-audit -r app/inventory-api/requirements.txt -f json -o reports/sca-pip-audit.json
@@ -63,11 +65,12 @@ pipeline {
         stage('Container scanning') {
             steps {
                 sh '''
+                    set -euo pipefail
                     mkdir -p reports
                     docker run --rm \
                         -v /var/run/docker.sock:/var/run/docker.sock \
                         -v "$PWD:/workspace" \
-                        aquasec/trivy:latest image --format json \
+                        aquasec/trivy:0.56.2 image --format json \
                         --output /workspace/reports/container-trivy.json \
                         ${IMAGE}
                 '''
@@ -98,10 +101,11 @@ pipeline {
         stage('OWASP ZAP DAST scanning') {
             steps {
                 sh '''
+                    set -euo pipefail
                     mkdir -p reports
                     docker run --rm \
                         -v "$PWD/reports:/zap/wrk" \
-                        ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
+                        ghcr.io/zaproxy/zaproxy:2.15.0 zap-baseline.py \
                         -t ${DAST_TARGET_URL} \
                         -J zap-baseline.json \
                         -r zap-baseline.html
@@ -117,7 +121,14 @@ pipeline {
         stage('Log Analytics integration') {
             steps {
                 sh '''
+                    set -euo pipefail
                     if [ -n "$LOG_ANALYTICS_ENDPOINT" ] && [ -n "$LOG_ANALYTICS_TOKEN" ]; then
+                        case "$LOG_ANALYTICS_ENDPOINT" in
+                          https://*) ;;
+                          *) echo "Invalid LOG_ANALYTICS_ENDPOINT. Only HTTPS endpoints are allowed."; exit 1;;
+                        esac
+
+                        mkdir -p reports
                         jq -n \
                           --arg app "$APP_NAME" \
                           --arg build "$BUILD_NUMBER" \
@@ -126,8 +137,12 @@ pipeline {
                           --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
                           '{app: $app, build: $build, image: $image, status: $status, timestamp: $timestamp}' > reports/log-analytics-payload.json
 
-                        curl -sS -X POST "$LOG_ANALYTICS_ENDPOINT" \
-                            -H "Authorization: Bearer $LOG_ANALYTICS_TOKEN" \
+                        auth_header_file="$(mktemp)"
+                        trap 'rm -f "$auth_header_file"' EXIT
+                        printf 'Authorization: Bearer %s\n' "$LOG_ANALYTICS_TOKEN" > "$auth_header_file"
+
+                        curl --fail --show-error --silent -X POST "$LOG_ANALYTICS_ENDPOINT" \
+                            -H @"$auth_header_file" \
                             -H 'Content-Type: application/json' \
                             --data-binary @reports/log-analytics-payload.json
                     else
