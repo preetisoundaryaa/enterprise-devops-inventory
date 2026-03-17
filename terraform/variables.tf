@@ -15,3 +15,15 @@ variable "environment" {
   type        = string
   default     = "dev"
 }
+
+variable "allowed_locations" {
+  description = "Azure locations allowed for resource deployments"
+  type        = list(string)
+  default     = ["East US"]
+}
+
+variable "required_tags" {
+  description = "Tags required on resources"
+  type        = list(string)
+  default     = ["project", "environment"]
+}
